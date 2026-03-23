@@ -4,8 +4,10 @@ import pandas as pd
 
 app = FastAPI()
 
+# Load once (efficient)
 model = joblib.load("loan_model.pkl")
 preprocessor = joblib.load("preprocessor.pkl")
+feature_columns = joblib.load("feature_columns.pkl")
 
 @app.get("/")
 def home():
@@ -13,13 +15,26 @@ def home():
 
 @app.post("/predict")
 def predict(data: dict):
-    
-    df = pd.DataFrame([data])
-    X = preprocessor.transform(df)
-    
-    prob = model.predict_proba(X)[:,1][0]
-    
-    return {
-        "conversion_probability": float(prob),
-        "prediction": "Likely" if prob > 0.1 else "Not Likely"
-    }
+    try:
+        # Create full input with ALL features
+        input_data = {col: None for col in feature_columns}
+        
+        # Fill incoming data
+        input_data.update(data)
+
+        df = pd.DataFrame([input_data])
+
+        # IMPORTANT: correct column order
+        df = df[feature_columns]
+
+        X = preprocessor.transform(df)
+
+        prob = model.predict_proba(X)[:,1][0]
+
+        return {
+            "conversion_probability": float(prob),
+            "prediction": "Likely to Convert" if prob > 0.1 else "Not Likely"
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
